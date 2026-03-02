@@ -17,22 +17,33 @@ function normalizeTaskTitle(title: string): string {
     return normalized;
 }
 
-export async function toggleTaskStatus(taskId: string, currentStatus: 'TODO' | 'DONE' | string) {
+async function getAuthenticatedUserId() {
     const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+        throw new Error('Unauthorized');
+    }
+
+    return { supabase, userId: user.id };
+}
+
+export async function toggleTaskStatus(taskId: string, currentStatus: 'TODO' | 'DONE' | string) {
+    const { supabase, userId } = await getAuthenticatedUserId();
 
     const nextStatus = currentStatus === 'DONE' ? 'TODO' : 'DONE';
 
     const { error } = await supabase
         .from('tasks')
         .update({ status: nextStatus })
-        .eq('id', taskId);
+        .eq('id', taskId)
+        .eq('owner_id', userId);
 
     if (error) {
         console.error('Error updating task:', error);
         throw new Error('Failed to update task');
     }
 
-    // Revalidate the dashboard to instantly show the new data without a full page reload
     revalidatePath('/');
 }
 
@@ -64,7 +75,7 @@ export async function addTimelineNote(eventId: string, content: string, type: 'N
 }
 
 export async function addTask(title: string, priority: string = 'MEDIUM', isNow: boolean = true) {
-    const supabase = await createClient();
+    const { supabase, userId } = await getAuthenticatedUserId();
     const normalizedTitle = normalizeTaskTitle(title);
     const normalizedPriority = priority.toUpperCase();
 
@@ -72,13 +83,10 @@ export async function addTask(title: string, priority: string = 'MEDIUM', isNow:
         throw new Error('Invalid task priority');
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) throw new Error('Unauthorized for task creation');
-
     const { error } = await supabase
         .from('tasks')
         .insert({
-            owner_id: user.id,
+            owner_id: userId,
             title: normalizedTitle,
             status: 'TODO',
             priority: normalizedPriority,
@@ -88,6 +96,89 @@ export async function addTask(title: string, priority: string = 'MEDIUM', isNow:
     if (error) {
         console.error('Error inserting task:', error);
         throw new Error('Failed to create task');
+    }
+
+    revalidatePath('/');
+}
+
+export async function addTaskFromForm(formData: FormData) {
+    const title = String(formData.get('title') ?? '');
+    const priority = String(formData.get('priority') ?? 'MEDIUM');
+    const isNowValue = String(formData.get('isNow') ?? 'false');
+    const isNow = isNowValue === 'true';
+
+    await addTask(title, priority, isNow);
+}
+
+export async function setNowTask(taskId: string | FormData) {
+    if (taskId instanceof FormData) {
+        taskId = String(taskId.get('taskId') ?? '');
+    }
+
+    const { supabase, userId } = await getAuthenticatedUserId();
+
+    const { error: clearError } = await supabase
+        .from('tasks')
+        .update({ is_now: false })
+        .eq('owner_id', userId)
+        .eq('is_now', true);
+
+    if (clearError) {
+        console.error('Error clearing existing NOW task:', clearError);
+        throw new Error('Failed to update NOW task');
+    }
+
+    const { error: setError } = await supabase
+        .from('tasks')
+        .update({ is_now: true, status: 'IN_PROGRESS' })
+        .eq('id', taskId)
+        .eq('owner_id', userId);
+
+    if (setError) {
+        console.error('Error setting NOW task:', setError);
+        throw new Error('Failed to set NOW task');
+    }
+
+    revalidatePath('/');
+}
+
+export async function completeTask(taskId: string | FormData) {
+    if (taskId instanceof FormData) {
+        taskId = String(taskId.get('taskId') ?? '');
+    }
+
+    const { supabase, userId } = await getAuthenticatedUserId();
+
+    const { error } = await supabase
+        .from('tasks')
+        .update({ status: 'DONE', is_now: false })
+        .eq('id', taskId)
+        .eq('owner_id', userId);
+
+    if (error) {
+        console.error('Error completing task:', error);
+        throw new Error('Failed to complete task');
+    }
+
+    revalidatePath('/');
+}
+
+export async function moveTaskToDeck(taskId: string | FormData) {
+    if (taskId instanceof FormData) {
+        taskId = String(taskId.get('taskId') ?? '');
+    }
+
+    const { supabase, userId } = await getAuthenticatedUserId();
+
+    const { error } = await supabase
+        .from('tasks')
+        .update({ is_now: false, status: 'TODO' })
+        .eq('id', taskId)
+        .eq('owner_id', userId);
+
+    if (error) {
+        console.error('Error moving task to deck:', error);
+        throw new Error('Failed to move task to deck');
     }
 
     revalidatePath('/');
