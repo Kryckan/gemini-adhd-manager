@@ -230,6 +230,7 @@ async function upsertCalendarConnection(
         status?: 'CONNECTED' | 'DISCONNECTED';
         account_label?: string | null;
         webcal_url?: string | null;
+        selected_calendar_ids?: string[];
         sync_enabled?: boolean;
     }
 ) {
@@ -271,6 +272,28 @@ export async function disconnectCalendar(formData: FormData) {
     await upsertCalendarConnection(provider, {
         status: 'DISCONNECTED',
         sync_enabled: false,
+        webcal_url: null,
+        selected_calendar_ids: [],
+    });
+}
+
+function normalizeCalendarIdSelections(input: FormDataEntryValue | null): string[] {
+    if (typeof input !== 'string') {
+        return [];
+    }
+
+    return input
+        .split('\n')
+        .map((id) => id.trim())
+        .filter((id, index, array) => id.length > 0 && array.indexOf(id) === index)
+        .slice(0, 100);
+}
+
+export async function saveGoogleCalendarSelection(formData: FormData) {
+    const selectedCalendarIds = normalizeCalendarIdSelections(formData.get('selectedCalendarIds'));
+
+    await upsertCalendarConnection('GOOGLE', {
+        selected_calendar_ids: selectedCalendarIds,
     });
 }
 
