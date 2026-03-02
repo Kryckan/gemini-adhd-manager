@@ -1,8 +1,10 @@
 import React from 'react';
+import { addDays } from 'date-fns';
 import { createClient } from '@/utils/supabase/server';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { addTaskFromForm, completeTask, moveTaskToDeck, setNowTask } from '@/app/actions';
 import { getTaskPriorityStyles, getTaskStatusStyles } from '@/lib/tasks';
+import { CalendarPanel } from '@/components/ui/CalendarPanel';
 
 type TaskRow = {
   id: string;
@@ -36,10 +38,10 @@ export default async function AdhdManagerDashboard() {
   ];
 
   const timelineEvents = [
-    { time: '09:00', title: 'Morning Sync', active: true, notes: [] },
-    { time: '10:30', title: 'Supplier Call — Molex', notes: [{ id: 'n1', type: 'NOTE', content: 'Discuss Q3 budget limits' }, { id: 'n2', type: 'TAG', content: 'Urgent' }] },
-    { time: '13:00', title: '1:1 with Sarah H.', notes: [{ id: 'n3', type: 'LINK', content: 'Miro Board: Arch Review' }] },
-    { time: '15:00', title: 'Line 4 Status Review', notes: [] },
+    { id: 'evt-1', date: new Date().toISOString(), time: '09:00', title: 'Morning Sync', notes: [] },
+    { id: 'evt-2', date: new Date().toISOString(), time: '10:30', title: 'Supplier Call — Molex', notes: [{ id: 'n1', type: 'NOTE', content: 'Discuss Q3 budget limits' }, { id: 'n2', type: 'TAG', content: 'Urgent' }] },
+    { id: 'evt-3', date: addDays(new Date(), 1).toISOString(), time: '13:00', title: '1:1 with Sarah H.', notes: [{ id: 'n3', type: 'LINK', content: 'Miro Board: Arch Review' }] },
+    { id: 'evt-4', date: addDays(new Date(), 2).toISOString(), time: '15:00', title: 'Line 4 Status Review', notes: [] },
   ];
 
   const nowTask = nowTaskData || {
@@ -55,23 +57,13 @@ export default async function AdhdManagerDashboard() {
     { id: '#220', title: 'PLC firmware update', status: 'TODO', priority: 'LOW', is_now: false }
   ];
 
+
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-neutral-300 font-sans selection:bg-cyan-900 selection:text-cyan-50 flex overflow-hidden">
       <Sidebar />
 
-      <main className="flex-1 grid grid-cols-[300px_1fr_350px] divide-x divide-neutral-900 overflow-hidden">
-        <section className="bg-[#0f0f0f] flex flex-col overflow-y-auto w-full">
-          <header className="p-6 border-b border-neutral-900 shrink-0 sticky top-0 bg-[#0f0f0f]/90 backdrop-blur z-10 flex justify-between items-end">
-            <h2 className="text-[11px] font-mono text-neutral-500 uppercase tracking-widest">Timeline</h2>
-            <span className="text-[10px] font-mono text-[#00A3FF]">TODAY</span>
-          </header>
-
-          <div className="p-6 space-y-8">
-            {timelineEvents.map((evt, idx) => (
-              <TimelineItem key={idx} time={evt.time} title={evt.title} active={evt.active} notes={evt.notes} />
-            ))}
-          </div>
-        </section>
+      <main className="flex-1 grid grid-cols-[320px_1fr_350px] divide-x divide-neutral-900 overflow-hidden">
+        <CalendarPanel events={timelineEvents} />
 
         <section className="bg-[#0A0A0A] flex flex-col overflow-y-auto w-full relative">
           <header className="p-6 border-b border-neutral-900 shrink-0 sticky top-0 bg-[#0A0A0A]/90 backdrop-blur z-10 flex justify-between items-end">
@@ -148,32 +140,6 @@ export default async function AdhdManagerDashboard() {
           </div>
         </section>
       </main>
-    </div>
-  );
-}
-
-function TimelineItem({ time, title, active = false, notes = [] }: { time: string, title: string, active?: boolean, notes?: { id: string, type: string, content: string }[] }) {
-  return (
-    <div className={`flex flex-col gap-2 group ${active ? 'opacity-100' : 'opacity-60 hover:opacity-100'} transition-opacity`}>
-      <div className="flex gap-4">
-        <span className={`text-sm font-mono shrink-0 pt-0.5 ${active ? 'text-[#00A3FF]' : 'text-neutral-500'}`}>{time}</span>
-        <div className={`text-sm font-sans flex items-start ${active ? 'text-white font-medium' : 'text-neutral-300'}`}>
-          {active && <span className="mr-2 mt-1.5 inline-block shrink-0 w-1.5 h-1.5 bg-[#00A3FF] rounded-full animate-pulse" />}
-          <span className="leading-snug">{title}</span>
-        </div>
-      </div>
-      {notes.length > 0 && (
-        <div className="ml-16 border-l border-neutral-800 pl-4 py-1 flex flex-col gap-2">
-          {notes.map(note => (
-            <div key={note.id} className="flex items-center gap-2">
-              <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono border ${note.type === 'TAG' ? 'bg-[#00A3FF]/10 text-[#00A3FF] border-[#00A3FF]/20' : 'bg-neutral-900 text-neutral-500 border-neutral-800'}`}>
-                {note.type}
-              </span>
-              <p className="text-xs text-neutral-500 font-sans">{note.content}</p>
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
