@@ -2,7 +2,6 @@
 
 import React, { useMemo, useState } from 'react';
 import { addDays, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek, subDays } from 'date-fns';
-import { CalendarClock, Globe, Link2 } from 'lucide-react';
 
 type TimelineEventNote = { id: string; type: string; content: string };
 
@@ -13,30 +12,6 @@ type TimelineEvent = {
   title: string;
   notes: TimelineEventNote[];
 };
-
-const CALENDAR_CONNECTIONS = [
-  {
-    id: 'google-calendar',
-    name: 'Google Calendar',
-    description: 'Two-way sync for meetings, deep work blocks, and reminders.',
-    status: 'Not Connected',
-    icon: CalendarClock,
-    cta: 'Connect Google',
-  },
-  {
-    id: 'webcal-feed',
-    name: 'WebCal Feed',
-    description: 'Subscribe to shared schedules, school calendars, or team feeds.',
-    status: 'Ready to Import',
-    icon: Globe,
-    cta: 'Add WebCal URL',
-  },
-] as const;
-
-const UPCOMING_EXTERNAL_EVENTS = [
-  { id: 'ext-1', source: 'Google (preview)', time: 'Tomorrow · 08:30', title: 'Design review — automation board', tag: 'MEETING' },
-  { id: 'ext-2', source: 'WebCal (preview)', time: 'Thu · 16:00', title: 'Community parent session', tag: 'PERSONAL' },
-];
 
 export function CalendarPanel({ events }: { events: TimelineEvent[] }) {
   const today = useMemo(() => new Date(), []);
@@ -140,26 +115,6 @@ export function CalendarPanel({ events }: { events: TimelineEvent[] }) {
           </section>
         )}
 
-        <section className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[11px] font-mono text-neutral-500 uppercase tracking-widest">External Connections</h3>
-            <Link2 size={14} className="text-blue-400" />
-          </div>
-          {CALENDAR_CONNECTIONS.map((connection) => (
-            <ConnectionCard key={connection.id} {...connection} />
-          ))}
-        </section>
-
-        <section className="space-y-3 border-t border-neutral-900 pt-6">
-          <h3 className="text-[11px] font-mono text-neutral-500 uppercase tracking-widest">Imported Preview</h3>
-          {UPCOMING_EXTERNAL_EVENTS.map((event) => (
-            <div key={event.id} className="space-y-1">
-              <p className="text-[10px] font-mono uppercase text-neutral-600 tracking-wide">{event.source} · {event.time}</p>
-              <p className="text-sm text-neutral-300">{event.title}</p>
-              <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-mono border border-neutral-800 text-neutral-500">{event.tag}</span>
-            </div>
-          ))}
-        </section>
       </div>
     </section>
   );
@@ -180,41 +135,6 @@ function buildCalendarGrid(referenceDate: Date) {
   }
 
   return days;
-}
-
-function ConnectionCard({
-  name,
-  description,
-  status,
-  icon: Icon,
-  cta,
-}: {
-  name: string;
-  description: string;
-  status: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  cta: string;
-}) {
-  return (
-    <article className="bg-neutral-950/50 rounded-lg p-4 space-y-3 border border-neutral-900">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h4 className="text-sm text-neutral-200 font-medium">{name}</h4>
-          <p className="text-xs text-neutral-500 leading-relaxed">{description}</p>
-        </div>
-        <Icon size={16} className="text-blue-400 shrink-0 mt-0.5" />
-      </div>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-[10px] uppercase tracking-wide font-mono text-neutral-500">{status}</span>
-        <button
-          type="button"
-          className="text-xs font-mono px-2.5 py-1.5 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2"
-        >
-          {cta}
-        </button>
-      </div>
-    </article>
-  );
 }
 
 function ViewSwitchButton({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {

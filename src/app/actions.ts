@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache';
 
 const ALLOWED_PRIORITIES = new Set(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
 const ALLOWED_NOTE_TYPES = new Set(['NOTE', 'TAG', 'LINK']);
+const ALLOWED_CALENDAR_PROVIDERS = new Set(['GOOGLE', 'WEBCAL']);
 
 function normalizeTaskTitle(title: string): string {
     const normalized = title.trim();
@@ -182,4 +183,118 @@ export async function moveTaskToDeck(taskId: string | FormData) {
     }
 
     revalidatePath('/');
+}
+
+function normalizeProvider(input: string): 'GOOGLE' | 'WEBCAL' {
+    const provider = input.trim().toUpperCase();
+    if (!ALLOWED_CALENDAR_PROVIDERS.has(provider)) {
+        throw new Error('Invalid calendar provider');
+    }
+    return provider as 'GOOGLE' | 'WEBCAL';
+}
+
+function normalizeOptionalLabel(input: FormDataEntryValue | null): string | null {
+    if (typeof input !== 'string') {
+        return null;
+    }
+    const value = input.trim();
+    return value.length > 0 ? value.slice(0, 160) : null;
+}
+
+function normalizeWebcalUrl(input: FormDataEntryValue | null): string | null {
+    if (typeof input !== 'string') {
+        return null;
+    }
+
+    const raw = input.trim();
+    if (!raw) {
+        return null;
+    }
+
+    const normalizedRaw = raw.startsWith('webcal://') ? raw.replace(/^webcal:\/\//, 'https://') : raw;
+
+    try {
+        const parsed = new URL(normalizedRaw);
+        if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+            return null;
+        }
+        return parsed.toString();
+    } catch {
+        return null;
+    }
+}
+
+async function upsertCalendarConnection(
+    provider: 'GOOGLE' | 'WEBCAL',
+    updates: {
+        status?: 'CONNECTED' | 'DISCONNECTED';
+        account_label?: string | null;
+        webcal_url?: string | null;
+        sync_enabled?: boolean;
+    }
+) {
+    const { supabase, userId } = await getAuthenticatedUserId();
+
+    const { error } = await supabase
+        .from('calendar_connections')
+        .upsert(
+            {
+                owner_id: userId,
+                provider,
+                ...updates,
+            },
+            { onConflict: 'owner_id,provider' }
+        );
+
+    if (error) {
+        console.error('Error upserting calendar connection:', error);
+        throw new Error('Failed to update calendar connection');
+    }
+
+    revalidatePath('/');
+    revalidatePath('/settings');
+}
+
+export async function connectGoogleCalendar(formData: FormData) {
+    const accountLabel = normalizeOptionalLabel(formData.get('accountLabel')) ?? 'Google Account';
+
+    await upsertCalendarConnection('GOOGLE', {
+        status: 'CONNECTED',
+        account_label: accountLabel,
+        sync_enabled: true,
+    });
+}
+
+export async function disconnectCalendar(formData: FormData) {
+    const provider = normalizeProvider(String(formData.get('provider') ?? ''));
+
+    await upsertCalendarConnection(provider, {
+        status: 'DISCONNECTED',
+        sync_enabled: false,
+    });
+}
+
+export async function saveWebcalFeed(formData: FormData) {
+    const webcalUrl = normalizeWebcalUrl(formData.get('webcalUrl'));
+    if (!webcalUrl) {
+        throw new Error('Invalid WebCal URL');
+    }
+
+    const accountLabel = normalizeOptionalLabel(formData.get('accountLabel')) ?? 'WebCal Feed';
+
+    await upsertCalendarConnection('WEBCAL', {
+        status: 'CONNECTED',
+        account_label: accountLabel,
+        webcal_url: webcalUrl,
+        sync_enabled: true,
+    });
+}
+
+export async function setCalendarSyncEnabled(formData: FormData) {
+    const provider = normalizeProvider(String(formData.get('provider') ?? ''));
+    const enabled = String(formData.get('enabled') ?? 'false') === 'true';
+
+    await upsertCalendarConnection(provider, {
+        sync_enabled: enabled,
+    });
 }
