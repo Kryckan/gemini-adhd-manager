@@ -1,32 +1,8 @@
 import React from 'react';
-import { addDays, endOfMonth, endOfWeek, format, isSameDay, isSameMonth, startOfMonth, startOfWeek } from 'date-fns';
-import { Link2, CalendarClock, Globe } from 'lucide-react';
+import { addDays } from 'date-fns';
 import { createClient } from '@/utils/supabase/server';
 import { Sidebar } from '@/components/ui/Sidebar';
-
-const CALENDAR_CONNECTIONS = [
-  {
-    id: 'google-calendar',
-    name: 'Google Calendar',
-    description: 'Two-way sync for meetings, deep work blocks, and reminders.',
-    status: 'Not Connected',
-    icon: CalendarClock,
-    cta: 'Connect Google',
-  },
-  {
-    id: 'webcal-feed',
-    name: 'WebCal Feed',
-    description: 'Subscribe to shared schedules, school calendars, or team feeds.',
-    status: 'Ready to Import',
-    icon: Globe,
-    cta: 'Add WebCal URL',
-  },
-] as const;
-
-const UPCOMING_EXTERNAL_EVENTS = [
-  { id: 'ext-1', source: 'Google (preview)', time: 'Tomorrow · 08:30', title: 'Design review — automation board', tag: 'MEETING' },
-  { id: 'ext-2', source: 'WebCal (preview)', time: 'Thu · 16:00', title: 'Community parent session', tag: 'PERSONAL' },
-];
+import { CalendarPanel } from '@/components/ui/CalendarPanel';
 
 export default async function AdhdManagerDashboard() {
   const supabase = await createClient();
@@ -51,10 +27,10 @@ export default async function AdhdManagerDashboard() {
   ];
 
   const timelineEvents = [
-    { id: 'evt-1', date: new Date(), time: '09:00', title: 'Morning Sync', active: true, notes: [] },
-    { id: 'evt-2', date: new Date(), time: '10:30', title: 'Supplier Call — Molex', notes: [{ id: 'n1', type: 'NOTE', content: 'Discuss Q3 budget limits' }, { id: 'n2', type: 'TAG', content: 'Urgent' }] },
-    { id: 'evt-3', date: addDays(new Date(), 1), time: '13:00', title: '1:1 with Sarah H.', notes: [{ id: 'n3', type: 'LINK', content: 'Miro Board: Arch Review' }] },
-    { id: 'evt-4', date: addDays(new Date(), 2), time: '15:00', title: 'Line 4 Status Review', notes: [] },
+    { id: 'evt-1', date: new Date().toISOString(), time: '09:00', title: 'Morning Sync', notes: [] },
+    { id: 'evt-2', date: new Date().toISOString(), time: '10:30', title: 'Supplier Call — Molex', notes: [{ id: 'n1', type: 'NOTE', content: 'Discuss Q3 budget limits' }, { id: 'n2', type: 'TAG', content: 'Urgent' }] },
+    { id: 'evt-3', date: addDays(new Date(), 1).toISOString(), time: '13:00', title: '1:1 with Sarah H.', notes: [{ id: 'n3', type: 'LINK', content: 'Miro Board: Arch Review' }] },
+    { id: 'evt-4', date: addDays(new Date(), 2).toISOString(), time: '15:00', title: 'Line 4 Status Review', notes: [] },
   ];
 
   const nowTask = nowTaskData || {
@@ -69,69 +45,13 @@ export default async function AdhdManagerDashboard() {
     { id: '#220', title: 'PLC firmware update', status: 'TODO', color: 'bg-neutral-600' },
   ];
 
-  const calendarDays = buildCalendarGrid(new Date());
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-neutral-300 font-sans selection:bg-cyan-900 selection:text-cyan-50 flex overflow-hidden">
       <Sidebar />
 
       <main className="flex-1 grid grid-cols-[320px_1fr_350px] divide-x divide-neutral-900 overflow-hidden">
-        <section className="bg-[#0f0f0f] flex flex-col overflow-y-auto w-full">
-          <header className="p-6 border-b border-neutral-900 shrink-0 sticky top-0 bg-[#0f0f0f]/90 backdrop-blur z-10 flex justify-between items-end">
-            <h2 className="text-[11px] font-mono text-neutral-500 uppercase tracking-widest">Calendar Layer</h2>
-            <span className="text-[10px] font-mono text-[#00A3FF]">{format(new Date(), 'MMM yyyy')}</span>
-          </header>
-
-          <div className="p-6 space-y-8">
-            <section>
-              <div className="grid grid-cols-7 text-[10px] uppercase tracking-widest text-neutral-600 mb-3 font-mono">
-                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day) => (
-                  <span key={day} className="text-center">{day}</span>
-                ))}
-              </div>
-              <div className="grid grid-cols-7 gap-1.5">
-                {calendarDays.map((day) => {
-                  const eventCount = timelineEvents.filter((event) => isSameDay(event.date, day)).length;
-                  const isToday = isSameDay(day, new Date());
-                  const outsideMonth = !isSameMonth(day, new Date());
-                  return (
-                    <button
-                      key={day.toISOString()}
-                      className={`h-10 text-xs rounded-md transition-colors font-mono relative focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2 ${
-                        isToday ? 'bg-blue-500/20 text-blue-400' : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-900'
-                      } ${outsideMonth ? 'opacity-40' : ''}`}
-                      type="button"
-                    >
-                      {format(day, 'd')}
-                      {eventCount > 0 && <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-[#00A3FF]" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-[11px] font-mono text-neutral-500 uppercase tracking-widest">External Connections</h3>
-                <Link2 size={14} className="text-blue-400" />
-              </div>
-              {CALENDAR_CONNECTIONS.map((connection) => (
-                <ConnectionCard key={connection.id} {...connection} />
-              ))}
-            </section>
-
-            <section className="space-y-3 border-t border-neutral-900 pt-6">
-              <h3 className="text-[11px] font-mono text-neutral-500 uppercase tracking-widest">Imported Preview</h3>
-              {UPCOMING_EXTERNAL_EVENTS.map((event) => (
-                <div key={event.id} className="space-y-1">
-                  <p className="text-[10px] font-mono uppercase text-neutral-600 tracking-wide">{event.source} · {event.time}</p>
-                  <p className="text-sm text-neutral-300">{event.title}</p>
-                  <span className="inline-flex px-1.5 py-0.5 rounded text-[9px] font-mono border border-neutral-800 text-neutral-500">{event.tag}</span>
-                </div>
-              ))}
-            </section>
-          </div>
-        </section>
+        <CalendarPanel events={timelineEvents} />
 
         <section className="bg-[#0A0A0A] flex flex-col overflow-y-auto w-full relative">
           <header className="p-6 border-b border-neutral-900 shrink-0 sticky top-0 bg-[#0A0A0A]/90 backdrop-blur z-10 flex justify-between items-end">
@@ -184,58 +104,6 @@ export default async function AdhdManagerDashboard() {
         </section>
       </main>
     </div>
-  );
-}
-
-function buildCalendarGrid(referenceDate: Date) {
-  const monthStart = startOfMonth(referenceDate);
-  const monthEnd = endOfMonth(referenceDate);
-  const gridStart = startOfWeek(monthStart);
-  const gridEnd = endOfWeek(monthEnd);
-
-  const days: Date[] = [];
-  let currentDay = gridStart;
-
-  while (currentDay <= gridEnd) {
-    days.push(currentDay);
-    currentDay = addDays(currentDay, 1);
-  }
-
-  return days;
-}
-
-function ConnectionCard({
-  name,
-  description,
-  status,
-  icon: Icon,
-  cta,
-}: {
-  name: string;
-  description: string;
-  status: string;
-  icon: React.ComponentType<{ size?: number; className?: string }>;
-  cta: string;
-}) {
-  return (
-    <article className="bg-neutral-950/50 rounded-lg p-4 space-y-3 border border-neutral-900">
-      <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <h4 className="text-sm text-neutral-200 font-medium">{name}</h4>
-          <p className="text-xs text-neutral-500 leading-relaxed">{description}</p>
-        </div>
-        <Icon size={16} className="text-blue-400 shrink-0 mt-0.5" />
-      </div>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-[10px] uppercase tracking-wide font-mono text-neutral-500">{status}</span>
-        <button
-          type="button"
-          className="text-xs font-mono px-2.5 py-1.5 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2"
-        >
-          {cta}
-        </button>
-      </div>
-    </article>
   );
 }
 
