@@ -1,12 +1,35 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Command } from 'cmdk';
 import { Search, CheckCircle, Calendar, ClipboardList, Target } from 'lucide-react';
 import { useShortcutContext } from '@/components/providers/ShortcutProvider';
+import { addTask } from '@/app/actions';
 
 export function CommandPalette() {
     const { isCommandPaletteOpen, setCommandPaletteOpen } = useShortcutContext();
+    const [query, setQuery] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const handleAddTask = async () => {
+        if (isSubmitting) return;
+
+        const title = query.trim() || 'New Unnamed Task';
+        setIsSubmitting(true);
+        setError(null);
+
+        try {
+            await addTask(title, 'MEDIUM', true);
+            setQuery('');
+            setCommandPaletteOpen(false);
+        } catch (insertError) {
+            console.error('Command palette task creation failed', insertError);
+            setError('Could not create task. Try again.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
 
     if (!isCommandPaletteOpen) return null;
 
@@ -26,6 +49,11 @@ export function CommandPalette() {
                             autoFocus
                             placeholder="Search or command (⌘K)... Type 'Assign' to delegate."
                             className="bg-transparent w-full text-white text-lg outline-none placeholder:text-neutral-600 font-light border-none focus:ring-0"
+                            value={query}
+                            onValueChange={(value) => {
+                                setQuery(value);
+                                if (error) setError(null);
+                            }}
                         />
                     </div>
 
@@ -39,12 +67,7 @@ export function CommandPalette() {
                                 icon={<CheckCircle size={16} />}
                                 label="Add Task to NOW"
                                 shortcut="T"
-                                onSelect={() => {
-                                    import('@/app/actions').then(({ addTask }) => {
-                                        addTask('New Unnamed Task', 'MEDIUM', true).catch(console.error);
-                                    });
-                                    setCommandPaletteOpen(false);
-                                }}
+                                onSelect={handleAddTask}
                             />
                             <CommandItem
                                 icon={<Target size={16} />}
@@ -55,6 +78,8 @@ export function CommandPalette() {
                             <CommandItem icon={<Calendar size={16} />} label="View Upcoming Schedule" shortcut="S" onSelect={() => setCommandPaletteOpen(false)} />
                             <CommandItem icon={<ClipboardList size={16} />} label="Show Delegated Items" shortcut="D" onSelect={() => setCommandPaletteOpen(false)} />
                         </Command.Group>
+                        {error && <p className="px-3 py-2 text-xs font-mono text-red-400">{error}</p>}
+                        {isSubmitting && <p className="px-3 py-2 text-xs font-mono text-neutral-500">Creating task...</p>}
                     </Command.List>
                 </Command>
             </div>

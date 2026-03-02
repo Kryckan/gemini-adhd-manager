@@ -4,10 +4,23 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/utils/supabase/server';
 
+function getStringField(formData: FormData, key: string): string {
+    const value = formData.get(key);
+    return typeof value === 'string' ? value.trim() : '';
+}
+
+function isSignupEnabled(): boolean {
+    return process.env.ENABLE_SIGNUP === 'true';
+}
+
 export async function login(formData: FormData) {
     const supabase = await createClient();
-    const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
+    const email = getStringField(formData, 'email').toLowerCase();
+    const password = getStringField(formData, 'password');
+
+    if (!email || !password) {
+        redirect('/login?error=Email and password are required');
+    }
 
     const { error } = await supabase.auth.signInWithPassword({
         email,
@@ -23,19 +36,33 @@ export async function login(formData: FormData) {
 }
 
 export async function signup(formData: FormData) {
-    const email = formData.get('email') as string;
-    const password = formData.get('password') as string;
+    if (!isSignupEnabled()) {
+        redirect('/login?error=Registration is disabled. Contact the system owner.');
+    }
+
+    const email = getStringField(formData, 'email').toLowerCase();
+    const password = getStringField(formData, 'password');
+    const signupSecret = getStringField(formData, 'signupSecret');
 
     // STRICT ACCESS CONTROL: Only allow the predefined owner email to register.
-    const allowedEmail = process.env.OWNER_EMAIL;
+    const allowedEmail = process.env.OWNER_EMAIL?.toLowerCase();
+    const expectedSignupSecret = process.env.OWNER_SIGNUP_SECRET;
 
-    if (!allowedEmail || email.toLowerCase() !== allowedEmail.toLowerCase()) {
+    if (!email || !password) {
+        redirect('/login?error=Email and password are required');
+    }
+
+    if (!allowedEmail || email !== allowedEmail) {
         redirect('/login?error=Registration is currently restricted to the system owner.');
+    }
+
+    if (expectedSignupSecret && signupSecret !== expectedSignupSecret) {
+        redirect('/login?error=Invalid registration access code');
     }
 
     const supabase = await createClient();
 
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
         email,
         password,
     });
@@ -44,31 +71,39 @@ export async function signup(formData: FormData) {
         redirect('/login?error=Could not create account');
     }
 
-    // After signup, we also want to create the user's profile
-    const { data: { user } } = await supabase.auth.getUser();
-    if (user) {
-        const { error: profileError } = await supabase.from('profiles').insert({
-            id: user.id,
-            email: user.email,
-        });
+    const user = data.user;
 
-        if (profileError) {
-            console.error('Silent failure: Profile creation failed', profileError);
-            redirect('/login?error=Account created but failed to provision database profile. Contact administrator.');
-        }
+    if (!user) {
+        redirect('/login?error=Account created. Please verify your email before signing in.');
+    }
 
-        // Create a dummy task for them
-        const { error: taskError } = await supabase.from('tasks').insert({
-            owner_id: user.id,
-            title: 'Welcome to FlowState\nExplore the dashboard features',
-            status: 'TODO',
-            priority: 'HIGH',
-            is_now: true
-        });
+    // If your Supabase project requires email verification, there is no active session yet.
+    // In that case we stop here and ask the user to verify before first sign-in.
+    if (!data.session) {
+        redirect('/login?error=Account created. Check your inbox to verify email, then sign in.');
+    }
 
-        if (taskError) {
-            console.error('Silent failure: Default task creation failed', taskError);
-        }
+    const { error: profileError } = await supabase.from('profiles').insert({
+        id: user.id,
+        email: user.email,
+    });
+
+    if (profileError) {
+        console.error('Profile creation failed during signup provisioning', profileError);
+        redirect('/login?error=Account created but profile provisioning failed. Contact administrator.');
+    }
+
+    const { error: taskError } = await supabase.from('tasks').insert({
+        owner_id: user.id,
+        title: 'Welcome to FlowState\nExplore the dashboard features',
+        status: 'TODO',
+        priority: 'HIGH',
+        is_now: true
+    });
+
+    if (taskError) {
+        console.error('Default task creation failed during signup provisioning', taskError);
+        redirect('/login?error=Account created but starter task provisioning failed. Contact administrator.');
     }
 
     revalidatePath('/', 'layout');

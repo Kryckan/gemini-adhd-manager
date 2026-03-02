@@ -1,8 +1,14 @@
 import React from 'react';
 import { login, signup } from './actions';
 
-export default async function LoginPage({ searchParams }: { searchParams: { error?: string } }) {
+type LoginPageProps = {
+    searchParams: Promise<{ error?: string }>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
     const resolvedSearchParams = await searchParams;
+    const isSignupEnabled = process.env.ENABLE_SIGNUP === 'true';
+    const requiresSignupSecret = Boolean(process.env.OWNER_SIGNUP_SECRET);
 
     return (
         <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center font-sans">
@@ -45,13 +51,28 @@ export default async function LoginPage({ searchParams }: { searchParams: { erro
                         />
                     </div>
 
+                    {isSignupEnabled && requiresSignupSecret && (
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-mono text-neutral-500 uppercase tracking-widest">Signup Access Code</label>
+                            <input
+                                name="signupSecret"
+                                type="password"
+                                placeholder="Owner access code"
+                                autoComplete="off"
+                                className="w-full bg-[#1A1A1A] border border-neutral-800 text-neutral-300 rounded p-3 text-sm focus:outline-none focus:border-neutral-600 focus:ring-1 focus:ring-neutral-600 transition-all font-mono pb-2"
+                            />
+                        </div>
+                    )}
+
                     <div className="flex gap-4 mt-6">
                         <button formAction={login} className="flex-1 bg-white text-black font-medium py-3 rounded text-sm hover:bg-neutral-200 transition-colors flex items-center justify-center">
                             SIGN IN
                         </button>
-                        <button formAction={signup} className="flex-1 bg-transparent border border-neutral-700 text-white font-medium py-3 rounded text-sm hover:bg-neutral-800 transition-colors flex items-center justify-center">
-                            SIGN UP
-                        </button>
+                        {isSignupEnabled && (
+                            <button formAction={signup} className="flex-1 bg-transparent border border-neutral-700 text-white font-medium py-3 rounded text-sm hover:bg-neutral-800 transition-colors flex items-center justify-center">
+                                SIGN UP
+                            </button>
+                        )}
                     </div>
                 </form>
 
