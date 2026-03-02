@@ -2,7 +2,7 @@ import React from 'react';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { Switch } from '@/components/ui/Switch';
-import { connectGoogleCalendar, disconnectCalendar, saveWebcalFeed, setCalendarSyncEnabled } from '@/app/actions';
+import { connectGoogleCalendar, disconnectCalendar, saveGoogleCalendarSelection, saveWebcalFeed, setCalendarSyncEnabled } from '@/app/actions';
 import { createClient } from '@/utils/supabase/server';
 
 type CalendarConnectionRow = {
@@ -11,13 +11,14 @@ type CalendarConnectionRow = {
   sync_enabled: boolean | null;
   account_label: string | null;
   webcal_url: string | null;
+  selected_calendar_ids: string[] | null;
 };
 
 async function getCalendarConnections() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('calendar_connections')
-    .select('provider,status,sync_enabled,account_label,webcal_url');
+    .select('provider,status,sync_enabled,account_label,webcal_url,selected_calendar_ids');
 
   if (error) {
     if (error.code === '42P01') {
@@ -38,6 +39,7 @@ export default async function SettingsPage() {
   const googleConnected = google?.status === 'CONNECTED';
   const googleSyncEnabled = google?.sync_enabled ?? false;
   const googleAccountLabel = google?.account_label ?? 'Google Account';
+  const selectedGoogleCalendars = google?.selected_calendar_ids ?? [];
 
   const webcalConnected = webcal?.status === 'CONNECTED';
   const webcalSyncEnabled = webcal?.sync_enabled ?? false;
@@ -111,20 +113,41 @@ export default async function SettingsPage() {
                     </button>
                   </form>
                 ) : (
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <form action={setCalendarSyncEnabled}>
+                  <div className="space-y-4">
+                    <form action={saveGoogleCalendarSelection} className="space-y-2">
+                      <label className="block text-[11px] font-mono uppercase tracking-widest text-neutral-500">
+                        Visible Google Calendars (one calendar ID per line)
+                      </label>
+                      <textarea
+                        name="selectedCalendarIds"
+                        rows={5}
+                        defaultValue={selectedGoogleCalendars.join('\n')}
+                        placeholder="primary\nteam@example.com\nfamily@example.com"
+                        className="w-full bg-neutral-900/70 border border-neutral-800 rounded px-3 py-2 text-xs text-neutral-200 placeholder:text-neutral-600"
+                      />
+                      <p className="text-[11px] text-neutral-500">
+                        Leave empty to show every calendar in this Google account.
+                      </p>
+                      <button className="px-4 py-2 text-xs font-mono rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 transition-colors">
+                        Save Calendar Selection
+                      </button>
+                    </form>
+
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <form action={setCalendarSyncEnabled}>
                       <input type="hidden" name="provider" value="GOOGLE" />
                       <input type="hidden" name="enabled" value={googleSyncEnabled ? 'false' : 'true'} />
                       <button className="px-4 py-2 text-xs font-mono rounded border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors">
                         {googleSyncEnabled ? 'Pause Sync' : 'Enable Sync'}
                       </button>
-                    </form>
-                    <form action={disconnectCalendar}>
-                      <input type="hidden" name="provider" value="GOOGLE" />
-                      <button className="px-4 py-2 text-xs font-mono rounded border border-red-900/50 text-red-300 hover:border-red-700 hover:text-red-200 transition-colors">
-                        Disconnect
-                      </button>
-                    </form>
+                      </form>
+                      <form action={disconnectCalendar}>
+                        <input type="hidden" name="provider" value="GOOGLE" />
+                        <button className="px-4 py-2 text-xs font-mono rounded border border-red-900/50 text-red-300 hover:border-red-700 hover:text-red-200 transition-colors">
+                          Disconnect
+                        </button>
+                      </form>
+                    </div>
                   </div>
                 )}
               </article>
