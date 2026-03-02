@@ -40,3 +40,27 @@ export async function addTimelineNote(eventId: string, content: string, type: 'N
 
     revalidatePath('/');
 }
+
+export async function addTask(title: string, priority: string = 'MEDIUM', isNow: boolean = true) {
+    const supabase = await createClient();
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Unauthorized for task creation');
+
+    const { error } = await supabase
+        .from('tasks')
+        .insert({
+            owner_id: user.id,
+            title,
+            status: 'TODO',
+            priority,
+            is_now: isNow
+        });
+
+    if (error) {
+        console.error('Error inserting task:', error);
+        throw new Error('Failed to create task');
+    }
+
+    revalidatePath('/');
+}

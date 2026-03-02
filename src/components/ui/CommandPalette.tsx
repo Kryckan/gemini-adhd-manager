@@ -35,10 +35,25 @@ export function CommandPalette() {
                         </Command.Empty>
 
                         <Command.Group heading="Quick Actions" className="text-xs text-neutral-500 font-medium px-2 py-2">
-                            <CommandItem icon={<CheckCircle size={16} />} label="Add Task" shortcut="T" onSelect={() => console.log('Add Task')} />
-                            <CommandItem icon={<Target size={16} />} label="Focus Now" shortcut="F" onSelect={() => console.log('Focus Now')} />
-                            <CommandItem icon={<Calendar size={16} />} label="Schedule Meeting" shortcut="M" onSelect={() => console.log('Schedule')} />
-                            <CommandItem icon={<ClipboardList size={16} />} label="Find Report" shortcut="R" onSelect={() => console.log('Find Report')} />
+                            <CommandItem
+                                icon={<CheckCircle size={16} />}
+                                label="Add Task to NOW"
+                                shortcut="T"
+                                onSelect={() => {
+                                    import('@/app/actions').then(({ addTask }) => {
+                                        addTask('New Unnamed Task', 'MEDIUM', true).catch(console.error);
+                                    });
+                                    setCommandPaletteOpen(false);
+                                }}
+                            />
+                            <CommandItem
+                                icon={<Target size={16} />}
+                                label="Focus Now (Clear Screen)"
+                                shortcut="F"
+                                onSelect={() => setCommandPaletteOpen(false)}
+                            />
+                            <CommandItem icon={<Calendar size={16} />} label="View Upcoming Schedule" shortcut="S" onSelect={() => setCommandPaletteOpen(false)} />
+                            <CommandItem icon={<ClipboardList size={16} />} label="Show Delegated Items" shortcut="D" onSelect={() => setCommandPaletteOpen(false)} />
                         </Command.Group>
                     </Command.List>
                 </Command>

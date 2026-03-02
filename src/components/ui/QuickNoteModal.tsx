@@ -29,9 +29,16 @@ export function QuickNoteModal() {
                     ref={inputRef}
                     placeholder="Jot down a thought..."
                     className="w-full bg-transparent text-white text-4xl font-light outline-none placeholder:text-neutral-700 resize-none h-40 focus:ring-0 overflow-hidden"
-                    onKeyDown={(e) => {
+                    onKeyDown={async (e) => {
                         if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                            console.log('Saved note:', e.currentTarget.value);
+                            const value = e.currentTarget.value.trim();
+                            if (value) {
+                                // Fire and forget server mutation
+                                import('@/app/actions').then(({ addTask }) => {
+                                    addTask(`Quick Note: ${value}`, 'LOW', true).catch(console.error);
+                                });
+                                if (inputRef.current) inputRef.current.value = '';
+                            }
                             setQuickNoteOpen(false);
                         }
                     }}

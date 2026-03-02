@@ -18,7 +18,7 @@ create policy "Owners fully update own tasks" on tasks
 -- Actually, we can check that they aren't changing owner_id or delegated_to_user_id using the 'old' vs 'new' values implicitly in a trigger, 
 -- OR just use an RPC for delegates. But let's build the trigger.
 
-create or function prevent_delegate_hijacking()
+create or replace function prevent_delegate_hijacking()
 returns trigger
 security definer
 as $$
