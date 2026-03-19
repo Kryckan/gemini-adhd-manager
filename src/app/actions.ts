@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
+import { syncProviderForCurrentUser } from '@/lib/calendars/sync';
 
 const ALLOWED_PRIORITIES = new Set(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']);
 const ALLOWED_NOTE_TYPES = new Set(['NOTE', 'TAG', 'LINK']);
@@ -232,6 +233,11 @@ async function upsertCalendarConnection(
         webcal_url?: string | null;
         selected_calendar_ids?: string[];
         sync_enabled?: boolean;
+        access_token?: string | null;
+        refresh_token?: string | null;
+        token_expires_at?: string | null;
+        last_synced_at?: string | null;
+        last_sync_error?: string | null;
     }
 ) {
     const { supabase, userId } = await getAuthenticatedUserId();
@@ -263,6 +269,7 @@ export async function connectGoogleCalendar(formData: FormData) {
         status: 'CONNECTED',
         account_label: accountLabel,
         sync_enabled: true,
+        last_sync_error: null,
     });
 }
 
@@ -274,6 +281,9 @@ export async function disconnectCalendar(formData: FormData) {
         sync_enabled: false,
         webcal_url: null,
         selected_calendar_ids: [],
+        access_token: null,
+        refresh_token: null,
+        token_expires_at: null,
     });
 }
 
@@ -310,6 +320,7 @@ export async function saveWebcalFeed(formData: FormData) {
         account_label: accountLabel,
         webcal_url: webcalUrl,
         sync_enabled: true,
+        last_sync_error: null,
     });
 }
 
@@ -320,4 +331,11 @@ export async function setCalendarSyncEnabled(formData: FormData) {
     await upsertCalendarConnection(provider, {
         sync_enabled: enabled,
     });
+}
+
+export async function syncCalendarProvider(formData: FormData) {
+    const provider = normalizeProvider(String(formData.get('provider') ?? ''));
+    await syncProviderForCurrentUser(provider);
+    revalidatePath('/');
+    revalidatePath('/settings');
 }

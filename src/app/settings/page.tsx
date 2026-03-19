@@ -1,8 +1,9 @@
 import React from 'react';
+import Link from 'next/link';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { Switch } from '@/components/ui/Switch';
-import { connectGoogleCalendar, disconnectCalendar, saveGoogleCalendarSelection, saveWebcalFeed, setCalendarSyncEnabled } from '@/app/actions';
+import { connectGoogleCalendar, disconnectCalendar, saveGoogleCalendarSelection, saveWebcalFeed, setCalendarSyncEnabled, syncCalendarProvider } from '@/app/actions';
 import { createClient } from '@/utils/supabase/server';
 
 type CalendarConnectionRow = {
@@ -12,13 +13,19 @@ type CalendarConnectionRow = {
   account_label: string | null;
   webcal_url: string | null;
   selected_calendar_ids: string[] | null;
+  last_synced_at: string | null;
+  last_sync_error: string | null;
+};
+
+type SettingsPageProps = {
+  searchParams: Promise<{ calendarMessage?: string }>;
 };
 
 async function getCalendarConnections() {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from('calendar_connections')
-    .select('provider,status,sync_enabled,account_label,webcal_url,selected_calendar_ids');
+    .select('provider,status,sync_enabled,account_label,webcal_url,selected_calendar_ids,last_synced_at,last_sync_error');
 
   if (error) {
     if (error.code === '42P01') {
@@ -30,8 +37,24 @@ async function getCalendarConnections() {
   return { missingTable: false, rows: (data ?? []) as CalendarConnectionRow[] };
 }
 
-export default async function SettingsPage() {
+function formatSyncTime(value: string | null): string {
+  if (!value) return 'Never synced';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Never synced';
+  return `Last sync ${date.toLocaleString()}`;
+}
+
+function ConnectionBadge({ connected }: { connected: boolean }) {
+  return (
+    <span className={`text-[10px] font-mono uppercase px-2 py-1 rounded border ${connected ? 'text-emerald-400 border-emerald-400/20 bg-emerald-400/10' : 'text-neutral-500 border-neutral-800'}`}>
+      {connected ? 'Connected' : 'Disconnected'}
+    </span>
+  );
+}
+
+export default async function SettingsPage({ searchParams }: SettingsPageProps) {
   const { missingTable, rows } = await getCalendarConnections();
+  const resolvedSearchParams = await searchParams;
 
   const google = rows.find((row) => row.provider === 'GOOGLE');
   const webcal = rows.find((row) => row.provider === 'WEBCAL');
@@ -53,12 +76,12 @@ export default async function SettingsPage() {
       <main className="flex-1 flex flex-col overflow-y-auto w-full relative">
         <header className="p-10 lg:p-16 pb-0 shrink-0 flex flex-col items-start gap-4">
           <h1 className="text-5xl font-light tracking-tight text-white font-mono">SETTINGS</h1>
-          <p className="text-neutral-500 font-mono text-sm max-w-xl leading-relaxed">
-            Configure system parameters. Avoid unnecessary changes. Minimal operational noise is the baseline.
+          <p className="text-neutral-500 font-mono text-sm max-w-2xl leading-relaxed">
+            Configure operational behavior and external calendar sync. Each provider stores its own credentials and sync preferences.
           </p>
         </header>
 
-        <section className="flex-1 p-10 lg:p-16 pt-12 flex flex-col relative max-w-4xl">
+        <section className="flex-1 p-10 lg:p-16 pt-12 flex flex-col relative max-w-5xl">
           <Tabs defaultValue="calendars" className="w-full">
             <TabsList>
               <TabsTrigger value="general">GENERAL</TabsTrigger>
@@ -78,68 +101,79 @@ export default async function SettingsPage() {
               </div>
             </TabsContent>
 
-            <TabsContent value="calendars" className="mt-8 space-y-10">
-              <div>
-                <h2 className="text-2xl font-mono text-white mb-2">Calendar Connections</h2>
-                <p className="text-sm text-neutral-500">Connect or pause integrations used by the timeline calendar.</p>
+            <TabsContent value="calendars" className="mt-8 space-y-8">
+              <div className="space-y-2">
+                <h2 className="text-2xl font-mono text-white">Calendar Integrations</h2>
+                <p className="text-sm text-neutral-500">Connect providers, choose visible calendars, and run immediate sync from here.</p>
               </div>
 
-              {missingTable ? (
-                <div className="rounded-lg border border-yellow-900/50 bg-yellow-950/20 p-4 text-sm text-yellow-300">
-                  Calendar connections table is missing. Run your latest Supabase migrations, then reload this page.
+              {resolvedSearchParams.calendarMessage ? (
+                <div className="rounded-lg border border-blue-900/60 bg-blue-950/20 p-4 text-sm text-blue-300">
+                  {resolvedSearchParams.calendarMessage}
                 </div>
               ) : null}
 
-              <article className="rounded-lg border border-neutral-900 p-5 space-y-4 bg-neutral-950/40">
+              {missingTable ? (
+                <div className="rounded-lg border border-yellow-900/50 bg-yellow-950/20 p-4 text-sm text-yellow-300">
+                  Calendar tables are missing. Apply latest Supabase migrations and reload this page.
+                </div>
+              ) : null}
+
+              <article className="rounded-lg border border-neutral-900 p-6 space-y-5 bg-neutral-950/40">
                 <div className="flex items-center justify-between gap-3">
-                  <div>
+                  <div className="space-y-1">
                     <h3 className="text-lg font-mono text-white">Google Calendar</h3>
                     <p className="text-xs font-mono text-neutral-500">{googleConnected ? googleAccountLabel : 'Not connected'}</p>
+                    <p className="text-[11px] text-neutral-600">{formatSyncTime(google?.last_synced_at ?? null)}</p>
                   </div>
-                  <span className={`text-[10px] font-mono uppercase px-2 py-1 rounded border ${googleConnected ? 'text-emerald-400 border-emerald-400/20 bg-emerald-400/10' : 'text-neutral-500 border-neutral-800'}`}>
-                    {googleConnected ? 'Connected' : 'Disconnected'}
-                  </span>
+                  <ConnectionBadge connected={googleConnected} />
                 </div>
 
+                {google?.last_sync_error ? (
+                  <div className="rounded border border-red-900/40 bg-red-950/20 p-3 text-xs text-red-300">
+                    Last sync error: {google.last_sync_error}
+                  </div>
+                ) : null}
+
                 {!googleConnected ? (
-                  <form action={connectGoogleCalendar} className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <input
-                      name="accountLabel"
-                      placeholder="Account label (optional)"
-                      className="w-full sm:max-w-xs bg-neutral-900/70 border border-neutral-800 rounded px-3 py-2 text-sm text-neutral-200 placeholder:text-neutral-600"
-                    />
-                    <button className="px-4 py-2 text-xs font-mono rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 transition-colors">
-                      Connect Google
-                    </button>
-                  </form>
+                  <Link
+                    href="/api/calendar/google/start"
+                    className="inline-flex px-4 py-2 text-xs font-mono rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 transition-colors"
+                  >
+                    Connect with Google OAuth
+                  </Link>
                 ) : (
                   <div className="space-y-4">
                     <form action={saveGoogleCalendarSelection} className="space-y-2">
                       <label className="block text-[11px] font-mono uppercase tracking-widest text-neutral-500">
-                        Visible Google Calendars (one calendar ID per line)
+                        Visible Google Calendars (one ID per line)
                       </label>
                       <textarea
                         name="selectedCalendarIds"
                         rows={5}
                         defaultValue={selectedGoogleCalendars.join('\n')}
-                        placeholder="primary\nteam@example.com\nfamily@example.com"
+                        placeholder="primary\nteam@company.com\nfamily@group.calendar.google.com"
                         className="w-full bg-neutral-900/70 border border-neutral-800 rounded px-3 py-2 text-xs text-neutral-200 placeholder:text-neutral-600"
                       />
-                      <p className="text-[11px] text-neutral-500">
-                        Leave empty to show every calendar in this Google account.
-                      </p>
+                      <p className="text-[11px] text-neutral-500">Leave empty to sync every calendar the account can read.</p>
                       <button className="px-4 py-2 text-xs font-mono rounded bg-blue-500/20 text-blue-300 hover:bg-blue-500/30 transition-colors">
-                        Save Calendar Selection
+                        Save Selection
                       </button>
                     </form>
 
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <form action={syncCalendarProvider}>
+                        <input type="hidden" name="provider" value="GOOGLE" />
+                        <button className="px-4 py-2 text-xs font-mono rounded bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 transition-colors">
+                          Sync Now
+                        </button>
+                      </form>
                       <form action={setCalendarSyncEnabled}>
-                      <input type="hidden" name="provider" value="GOOGLE" />
-                      <input type="hidden" name="enabled" value={googleSyncEnabled ? 'false' : 'true'} />
-                      <button className="px-4 py-2 text-xs font-mono rounded border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors">
-                        {googleSyncEnabled ? 'Pause Sync' : 'Enable Sync'}
-                      </button>
+                        <input type="hidden" name="provider" value="GOOGLE" />
+                        <input type="hidden" name="enabled" value={googleSyncEnabled ? 'false' : 'true'} />
+                        <button className="px-4 py-2 text-xs font-mono rounded border border-neutral-700 text-neutral-300 hover:text-white hover:border-neutral-500 transition-colors">
+                          {googleSyncEnabled ? 'Pause Sync' : 'Enable Sync'}
+                        </button>
                       </form>
                       <form action={disconnectCalendar}>
                         <input type="hidden" name="provider" value="GOOGLE" />
@@ -152,16 +186,21 @@ export default async function SettingsPage() {
                 )}
               </article>
 
-              <article className="rounded-lg border border-neutral-900 p-5 space-y-4 bg-neutral-950/40">
+              <article className="rounded-lg border border-neutral-900 p-6 space-y-5 bg-neutral-950/40">
                 <div className="flex items-center justify-between gap-3">
-                  <div>
+                  <div className="space-y-1">
                     <h3 className="text-lg font-mono text-white">WebCal Feed</h3>
                     <p className="text-xs font-mono text-neutral-500">{webcalConnected ? webcalAccountLabel : 'Not connected'}</p>
+                    <p className="text-[11px] text-neutral-600">{formatSyncTime(webcal?.last_synced_at ?? null)}</p>
                   </div>
-                  <span className={`text-[10px] font-mono uppercase px-2 py-1 rounded border ${webcalConnected ? 'text-emerald-400 border-emerald-400/20 bg-emerald-400/10' : 'text-neutral-500 border-neutral-800'}`}>
-                    {webcalConnected ? 'Connected' : 'Disconnected'}
-                  </span>
+                  <ConnectionBadge connected={webcalConnected} />
                 </div>
+
+                {webcal?.last_sync_error ? (
+                  <div className="rounded border border-red-900/40 bg-red-950/20 p-3 text-xs text-red-300">
+                    Last sync error: {webcal.last_sync_error}
+                  </div>
+                ) : null}
 
                 <form action={saveWebcalFeed} className="space-y-3">
                   <input
@@ -183,7 +222,13 @@ export default async function SettingsPage() {
                 </form>
 
                 {webcalConnected ? (
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="flex flex-wrap gap-3">
+                    <form action={syncCalendarProvider}>
+                      <input type="hidden" name="provider" value="WEBCAL" />
+                      <button className="px-4 py-2 text-xs font-mono rounded bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 transition-colors">
+                        Sync Now
+                      </button>
+                    </form>
                     <form action={setCalendarSyncEnabled}>
                       <input type="hidden" name="provider" value="WEBCAL" />
                       <input type="hidden" name="enabled" value={webcalSyncEnabled ? 'false' : 'true'} />

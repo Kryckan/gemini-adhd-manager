@@ -1,5 +1,5 @@
 import React from 'react';
-import { addDays } from 'date-fns';
+import { addDays, format } from 'date-fns';
 import { createClient } from '@/utils/supabase/server';
 import { Sidebar } from '@/components/ui/Sidebar';
 import { addTaskFromForm, completeTask, moveTaskToDeck, setNowTask } from '@/app/actions';
@@ -14,8 +14,25 @@ type TaskRow = {
   is_now: boolean;
 };
 
+type ImportedCalendarEventRow = {
+  id: string;
+  provider: 'GOOGLE' | 'WEBCAL';
+  title: string;
+  description: string | null;
+  starts_at: string;
+  source_calendar_name: string | null;
+};
+
+type TimelineEventRow = {
+  id: string;
+  title: string;
+  event_time: string;
+};
+
 export default async function AdhdManagerDashboard() {
   const supabase = await createClient();
+  const lowerBoundDate = new Date();
+  lowerBoundDate.setDate(lowerBoundDate.getDate() - 1);
 
   const { data: nowTaskData } = await supabase
     .from('tasks')
@@ -31,18 +48,63 @@ export default async function AdhdManagerDashboard() {
     .order('created_at', { ascending: false })
     .limit(6);
 
+  const { data: importedCalendarEvents } = await supabase
+    .from('calendar_events')
+    .select('id,provider,title,description,starts_at,source_calendar_name')
+    .gte('starts_at', lowerBoundDate.toISOString())
+    .order('starts_at', { ascending: true })
+    .limit(24);
+
+  const { data: localTimelineEvents } = await supabase
+    .from('timeline_events')
+    .select('id,title,event_time')
+    .order('event_time', { ascending: true })
+    .limit(12);
+
   const pulseDelegates = [
     { id: '1', owner: 'Erik Lindqvist', initials: 'EL', task: 'Conveyor belt motor calibration', status: 'ACTIVE', statusColor: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20' },
     { id: '2', owner: 'Sarah Henriksson', initials: 'SH', task: 'Sensor board supply chain', status: 'BLOCKED', statusColor: 'text-red-400 bg-red-400/10 border-red-400/20' },
     { id: '3', owner: 'Johan Bergman', initials: 'JB', task: 'QA — packaging module v3', status: 'BUSY', statusColor: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/20' },
   ];
 
-  const timelineEvents = [
+  const fallbackTimelineEvents = [
     { id: 'evt-1', date: new Date().toISOString(), time: '09:00', title: 'Morning Sync', notes: [] },
     { id: 'evt-2', date: new Date().toISOString(), time: '10:30', title: 'Supplier Call — Molex', notes: [{ id: 'n1', type: 'NOTE', content: 'Discuss Q3 budget limits' }, { id: 'n2', type: 'TAG', content: 'Urgent' }] },
     { id: 'evt-3', date: addDays(new Date(), 1).toISOString(), time: '13:00', title: '1:1 with Sarah H.', notes: [{ id: 'n3', type: 'LINK', content: 'Miro Board: Arch Review' }] },
     { id: 'evt-4', date: addDays(new Date(), 2).toISOString(), time: '15:00', title: 'Line 4 Status Review', notes: [] },
   ];
+
+  const mappedImportedEvents = ((importedCalendarEvents ?? []) as ImportedCalendarEventRow[]).map((event) => {
+    const startsAt = new Date(event.starts_at);
+    return {
+      id: event.id,
+      date: startsAt.toISOString(),
+      time: format(startsAt, 'HH:mm'),
+      title: event.title,
+      notes: [
+        { id: `${event.id}-provider`, type: 'TAG', content: event.provider },
+        ...(event.source_calendar_name ? [{ id: `${event.id}-calendar`, type: 'NOTE', content: event.source_calendar_name }] : []),
+        ...(event.description ? [{ id: `${event.id}-description`, type: 'NOTE', content: event.description }] : []),
+      ],
+    };
+  });
+
+  const mappedLocalEvents = ((localTimelineEvents ?? []) as TimelineEventRow[]).map((event) => {
+    const [hour, minute] = event.event_time.split(':');
+    const date = new Date();
+    date.setHours(Number(hour ?? '9'), Number(minute ?? '0'), 0, 0);
+    return {
+      id: event.id,
+      date: date.toISOString(),
+      time: `${hour ?? '09'}:${minute ?? '00'}`,
+      title: event.title,
+      notes: [{ id: `${event.id}-local`, type: 'TAG', content: 'LOCAL' }],
+    };
+  });
+
+  const timelineEvents = mappedImportedEvents.length > 0 || mappedLocalEvents.length > 0
+    ? [...mappedImportedEvents, ...mappedLocalEvents].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    : fallbackTimelineEvents;
 
   const nowTask = nowTaskData || {
     id: 'fallback',
